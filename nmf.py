@@ -6,6 +6,7 @@ import cv2
 import h5py
 import tensorflow
 import cv2
+from einops import rearrange
 #from dutil import *
 
 #User constants
@@ -45,40 +46,39 @@ prev_mouse_pos = None
 mouse_pressed = False
 cur_slider_ix = 0
 needs_update = True
-cur_params = np.zeros((num_params,), dtype=np.float32)
+cur_params = np.ones((num_params,), dtype=np.float32)
 cur_face = np.zeros((input_h, input_w, 3), dtype=np.uint8)
 rgb_array = np.zeros((input_h, input_w, 3), dtype=np.uint8)
 
 #Keras
-print("Loading Keras...")
-import os
-os.environ["MKL_THREADING_LAYER"] = "GNU"
-os.environ['THEANORC'] = "./" + device + ".theanorc"
-os.environ['KERAS_BACKEND'] = "theano"
-import theano
-print("Theano Version: " + theano.__version__)
-print("tensorflow Version: " + tensorflow.__version__)
+# print("Loading Keras...")
+# import os
+# os.environ["MKL_THREADING_LAYER"] = "GNU"
+# os.environ['THEANORC'] = "./" + device + ".theanorc"
+# os.environ['KERAS_BACKEND'] = "theano"
+# import theano
+# print("Theano Version: " + theano.__version__)
+# print("tensorflow Version: " + tensorflow.__version__)
 
-from tensorflow.keras.models import load_model
-from tensorflow.keras import Model
-from tensorflow.keras.optimizers import Adam, RMSprop, SGD
-from tensorflow.keras import backend as K
-K.set_image_data_format('channels_last')
+# from tensorflow.keras.models import load_model
+# from tensorflow.keras import Model
+# from tensorflow.keras import backend as K
+# K.set_image_data_format('channels_last')
 
-print( "Loading Encoder...")
-enc_model = load_model(enc_fname)
-enc = Model(inputs=enc_model.get_layer('encoder').input,
-						  outputs=enc_model.layers[-1].output)
+# print( "Loading Encoder...")
+# enc_model = load_model(enc_fname)
+# enc = Model(inputs=enc_model.get_layer('encoder').input,
+# 						  outputs=enc_model.layers[-1].output)
 
 print( "Loading Statistics...")
-means = np.load('means.npy')
-stds  = np.load('stds.npy')
-evals = np.sqrt(np.load('evals.npy'))
-evecs = np.load('evecs.npy')
+x_mean = np.load('std1.npy')
+W  = np.load('W1.npy')
+H = np.load('H1.npy')
 
-sort_inds = np.argsort(-evals)
-evals = evals[sort_inds]
-evecs = evecs[:,sort_inds]
+
+# sort_inds = np.argsort(-evals)
+# evals = evals[sort_inds]
+# evecs = evecs[:,sort_inds]
 
 #Open a window
 pygame.init()
@@ -139,8 +139,7 @@ def draw_sliders():
 
 def draw_face():
 	#pygame.surfarray.blit_array(face_surface_mini, np.transpose(cur_face, (2, 1, 0)))
-	pygame.surfarray.blit_array(face_surface_mini, np.transpose(cur_face,(1,0,2)))
-
+	pygame.surfarray.blit_array(face_surface_mini,np.transpose(cur_face,(1,0,2)))
 	pygame.transform.scale(face_surface_mini, (drawing_w, drawing_h), face_surface)
 	pygame.draw.rect(screen, (0,0,0), (drawing_x, drawing_y, drawing_w, drawing_h), 1)
 	
@@ -172,15 +171,21 @@ while running:
 
 	#Check if we need an update
 	if needs_update:
-		x = means + np.dot(evecs, (cur_params * evals).reshape(80,1))
+		#x = means + np.dot(evecs, (cur_params * evals).T).T
+		#x = x_min.T + np.dot(W, (cur_params * H.flatten()).reshape(80,1)).T #(8, 80)*(80, )
+		x = np.dot(W, (cur_params * np.mean(H,axis=1)).T)
 		#x = means + stds * cur_params
-		x = x.T
-		# print(means.shape) #(80,1)
-		# print(evecs.shape) #(80,80)
-		# print(cur_params.shape) #(80,)
-		# print(evals.shape) #(80,)
-		y = enc.predict(x)[0]
-		cur_face = (y * 255.0).astype(np.uint8)
+		# print("W",W.shape)
+		# print("cur param",cur_params.shape)
+		# print("Hmean",np.mean(H,axis=1).shape)
+		# print("x",x.shape) 
+
+		y = rearrange(x, '(h w c) -> h w c', h=128,w=128,c=3)
+		#y = enc.predict(x)[0]
+		#cur_face = (y * 255.0).astype(np.uint8)
+		cur_face = y 
+		cur_face = np.clip(cur_face, 0, 255)
+		
 		cur_face = cv2.cvtColor(cur_face, cv2.COLOR_BGR2RGB)
 		needs_update = False
 	

@@ -71,14 +71,15 @@ enc = Model(inputs=enc_model.get_layer('encoder').input,
 						  outputs=enc_model.layers[-1].output)
 
 print( "Loading Statistics...")
-means = np.load('means.npy')
-stds  = np.load('stds.npy')
-evals = np.sqrt(np.load('evals.npy'))
-evecs = np.load('evecs.npy')
+x_mean = np.load('means.npy')
+W  = np.load('W_last.npy')
+H = np.load('H_last.npy')
+x_min = np.full(x_mean.shape,np.amin(x_mean))
 
-sort_inds = np.argsort(-evals)
-evals = evals[sort_inds]
-evecs = evecs[:,sort_inds]
+
+# sort_inds = np.argsort(-evals)
+# evals = evals[sort_inds]
+# evecs = evecs[:,sort_inds]
 
 #Open a window
 pygame.init()
@@ -111,7 +112,7 @@ def update_mouse_move(mouse_pos):
 		slider_val = y - slider_row_ix * slider_h
 
 		slider_val = min(max(slider_val, slider_py), slider_h - slider_py) - slider_py
-		val = (float(slider_val) / (slider_h - slider_py*2) - 0.5) * 6.0
+		val = (float(slider_val) / (slider_h - slider_py*2) - 0.5) * 60.0
 		cur_params[int(cur_slider_ix)] = val
 		
 		needs_update = True
@@ -128,7 +129,7 @@ def draw_sliders():
 		cy_2 = y + slider_h - slider_py
 		pygame.draw.line(screen, slider_color, (cx, cy_1), (cx, cy_2))
 		
-		py = y + int((cur_params[i] / 6.0 + 0.5) * (slider_h - slider_py*2)) + slider_py
+		py = y + int((cur_params[i] / 60.0 + 0.5) * (slider_h - slider_py*2)) + slider_py
 		pygame.draw.circle(screen, slider_color, (cx, py), slider_w/2 - slider_px)
 		
 		cx_1 = x + slider_px
@@ -172,13 +173,10 @@ while running:
 
 	#Check if we need an update
 	if needs_update:
-		x = means + np.dot(evecs, (cur_params * evals).reshape(80,1))
+		#x = means + np.dot(evecs, (cur_params * evals).T).T
+		x = x_min.T + np.dot(W, (cur_params * H[:,0]).reshape(80,1)).T #(8, 80)*(80, )
 		#x = means + stds * cur_params
-		x = x.T
-		# print(means.shape) #(80,1)
-		# print(evecs.shape) #(80,80)
-		# print(cur_params.shape) #(80,)
-		# print(evals.shape) #(80,)
+		x = np.expand_dims(x.flatten(), axis=0)
 		y = enc.predict(x)[0]
 		cur_face = (y * 255.0).astype(np.uint8)
 		cur_face = cv2.cvtColor(cur_face, cv2.COLOR_BGR2RGB)
